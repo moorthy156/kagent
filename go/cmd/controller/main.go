@@ -17,6 +17,10 @@ limitations under the License.
 package main
 
 import (
+	"context"
+	"os"
+	"strings"
+
 	"github.com/kagent-dev/kagent/go/internal/httpserver/auth"
 	"github.com/kagent-dev/kagent/go/pkg/app"
 
@@ -27,9 +31,18 @@ import (
 
 //nolint:gocyclo
 func main() {
-	authorizer := &auth.NoopAuthorizer{}
-	authenticator := &auth.UnsecureAuthenticator{}
+	var authenticator auth.AuthProvider = &auth.UnsecureAuthenticator{}
+	if os.Getenv("OIDC_ISSUER_URL") != "" {
+		if oidcAuth, err := auth.NewOIDCAuthenticatorFromEnv(context.Background()); err == nil {
+			authenticator = oidcAuth
+		}
+	}
 	app.Start(func(bootstrap app.BootstrapConfig) (*app.ExtensionConfig, error) {
+		authorizer := &auth.NoopAuthorizer{}
+		if strings.EqualFold(strings.TrimSpace(os.Getenv("KAGENT_AUTHZ_MODE")), "k8s") {
+			authorizer = auth.NewK8sRBACAuthorizer(bootstrap.Manager.GetClient())
+		}
+
 		return &app.ExtensionConfig{
 			Authenticator:    authenticator,
 			Authorizer:       authorizer,

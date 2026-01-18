@@ -21,6 +21,14 @@ export function getBackendUrl() {
   return "http://localhost:8083/api";
 }
 
+export function getBackendOrigin() {
+	const url = getBackendUrl();
+	if (url.endsWith("/api")) {
+		return url.slice(0, -4);
+	}
+	return url;
+}
+
 export function getRelativeTimeString(date: string | number | Date): string {
   const now = new Date();
   const past = new Date(date);

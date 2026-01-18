@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { getBackendUrl } from "@/lib/utils";
 
 export async function getCurrentUserId() {
@@ -17,15 +19,14 @@ type ApiOptions = RequestInit & {
  * @throws Error with a descriptive message if the request fails
  */
 export async function fetchApi<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const userId = await getCurrentUserId();
   // Ensure path starts with a slash
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${getBackendUrl()}${cleanPath}`;
-  const urlWithUser = url.includes("?") ? `${url}&user_id=${userId}` : `${url}?user_id=${userId}`;
   
   try {
-    const response = await fetch(urlWithUser, {
+    const response = await fetch(url, {
       ...options,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -33,6 +34,10 @@ export async function fetchApi<T>(path: string, options: ApiOptions = {}): Promi
       },
       signal: AbortSignal.timeout(15000), // 15 second timeout
     });
+
+    if (response.status === 401) {
+      redirect(`/login?next=${encodeURIComponent(cleanPath)}`);
+    }
 
     if (!response.ok) {
       // Try to extract error message from response

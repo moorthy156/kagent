@@ -19,6 +19,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
   - kagent.dev
   resources:
   - agents/finalizers
@@ -113,6 +119,12 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
 - apiGroups:
   - kagent.dev
   resources:

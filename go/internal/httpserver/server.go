@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/kagent-dev/kagent/go/internal/a2a"
 	"github.com/kagent-dev/kagent/go/internal/database"
+	httpauth "github.com/kagent-dev/kagent/go/internal/httpserver/auth"
 	"github.com/kagent-dev/kagent/go/internal/httpserver/handlers"
 	common "github.com/kagent-dev/kagent/go/internal/utils"
 	"github.com/kagent-dev/kagent/go/internal/version"
@@ -137,6 +138,30 @@ func (s *HTTPServer) NeedLeaderElection() bool {
 func (s *HTTPServer) setupRoutes() {
 	// Health check endpoint
 	s.router.HandleFunc(APIPathHealth, adaptHealthHandler(s.handlers.Health.HandleHealth)).Methods(http.MethodGet)
+
+	// Auth (OIDC) endpoints. These are intended to be public.
+	// If the configured authenticator doesn't support interactive login, return 501.
+	s.router.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		if p, ok := s.authenticator.(httpauth.InteractiveAuthProvider); ok {
+			p.HandleLogin(w, r)
+			return
+		}
+		http.Error(w, "interactive login not configured", http.StatusNotImplemented)
+	}).Methods(http.MethodGet)
+	s.router.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
+		if p, ok := s.authenticator.(httpauth.InteractiveAuthProvider); ok {
+			p.HandleCallback(w, r)
+			return
+		}
+		http.Error(w, "interactive login not configured", http.StatusNotImplemented)
+	}).Methods(http.MethodGet)
+	s.router.HandleFunc("/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+		if p, ok := s.authenticator.(httpauth.InteractiveAuthProvider); ok {
+			p.HandleLogout(w, r)
+			return
+		}
+		http.Error(w, "interactive logout not configured", http.StatusNotImplemented)
+	}).Methods(http.MethodPost)
 
 	// Version
 	s.router.HandleFunc(APIPathVersion, adaptHandler(func(erw handlers.ErrorResponseWriter, r *http.Request) {

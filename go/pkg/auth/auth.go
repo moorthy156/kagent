@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type Verb string
@@ -75,6 +76,16 @@ func AuthSessionTo(ctx context.Context, session Session) context.Context {
 func AuthnMiddleware(authn AuthProvider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Public endpoints that must be reachable without an authenticated session.
+			// Otherwise, interactive login flows (e.g., OIDC callbacks) cannot complete.
+			if r.URL != nil {
+				path := r.URL.Path
+				if path == "/health" || path == "/version" || strings.HasPrefix(path, "/auth/") {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
 			session, err := authn.Authenticate(r.Context(), r.Header, r.URL.Query())
 			if err != nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
