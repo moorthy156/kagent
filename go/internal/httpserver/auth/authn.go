@@ -89,6 +89,10 @@ func A2ARequestHandler(authProvider auth.AuthProvider, agentNns types.Namespaced
 			}
 		}()
 
+		if selectedNS, ok := auth.SelectedNamespaceFrom(ctx); ok {
+			req.Header.Set("X-Kagent-Namespace", selectedNS)
+		}
+
 		if client == nil {
 			return nil, fmt.Errorf("a2aClient.httpRequestHandler: http client is nil")
 		}

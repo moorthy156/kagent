@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"fmt"
 
 	"github.com/kagent-dev/kagent/go/internal/database"
 	"github.com/kagent-dev/kagent/go/internal/httpserver/errors"
@@ -72,7 +73,13 @@ type KAgentCheckpointTupleResponse struct {
 func (h *CheckpointsHandler) HandlePutCheckpoint(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("checkpoints-handler").WithValues("operation", "put")
 
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
@@ -94,6 +101,14 @@ func (h *CheckpointsHandler) HandlePutCheckpoint(w ErrorResponseWriter, r *http.
 		w.RespondWithError(errors.NewBadRequestError("checkpoint is required", nil))
 		return
 	}
+
+	// Namespace-scope checkpoints by namespacing the thread ID and checkpoint namespace.
+	if req.CheckpointNS != "" && req.CheckpointNS != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("checkpoint_ns must match selected namespace", nil))
+		return
+	}
+	req.CheckpointNS = selectedNS
+	req.ThreadID = fmt.Sprintf("%s/%s", selectedNS, req.ThreadID)
 
 	log = log.WithValues(
 		"threadID", req.ThreadID,
@@ -128,7 +143,13 @@ func (h *CheckpointsHandler) HandlePutCheckpoint(w ErrorResponseWriter, r *http.
 func (h *CheckpointsHandler) HandleListCheckpoints(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("checkpoints-handler").WithValues("operation", "list")
 
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
@@ -141,6 +162,12 @@ func (h *CheckpointsHandler) HandleListCheckpoints(w ErrorResponseWriter, r *htt
 	}
 
 	checkpointNS := r.URL.Query().Get("checkpoint_ns")
+	if checkpointNS != "" && checkpointNS != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("checkpoint_ns must match selected namespace", nil))
+		return
+	}
+	checkpointNS = selectedNS
+	threadID = fmt.Sprintf("%s/%s", selectedNS, threadID)
 
 	var checkpointID *string
 	if checkpointIDStr := r.URL.Query().Get("checkpoint_id"); checkpointIDStr != "" {
@@ -204,7 +231,13 @@ func (h *CheckpointsHandler) HandleListCheckpoints(w ErrorResponseWriter, r *htt
 func (h *CheckpointsHandler) HandlePutWrites(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("checkpoints-handler").WithValues("operation", "put")
 
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
@@ -217,6 +250,13 @@ func (h *CheckpointsHandler) HandlePutWrites(w ErrorResponseWriter, r *http.Requ
 		w.RespondWithError(errors.NewBadRequestError("Invalid request body", err))
 		return
 	}
+
+	if req.CheckpointNS != "" && req.CheckpointNS != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("checkpoint_ns must match selected namespace", nil))
+		return
+	}
+	req.CheckpointNS = selectedNS
+	req.ThreadID = fmt.Sprintf("%s/%s", selectedNS, req.ThreadID)
 
 	log = log.WithValues(
 		"threadID", req.ThreadID,
@@ -257,7 +297,13 @@ func (h *CheckpointsHandler) HandlePutWrites(w ErrorResponseWriter, r *http.Requ
 func (h *CheckpointsHandler) HandleDeleteThread(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("checkpoints-handler").WithValues("operation", "delete")
 
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
@@ -265,9 +311,10 @@ func (h *CheckpointsHandler) HandleDeleteThread(w ErrorResponseWriter, r *http.R
 
 	threadID, err := GetPathParam(r, "thread_id")
 	if err != nil {
-		w.RespondWithError(errors.NewBadRequestError("Failed to get thread_id from path", err))
+		w.RespondWithError(errors.NewBadRequestError("Failed to get thread ID", err))
 		return
 	}
+	threadID = fmt.Sprintf("%s/%s", selectedNS, threadID)
 
 	log = log.WithValues("userID", userID, "threadID", threadID)
 

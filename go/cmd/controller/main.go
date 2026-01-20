@@ -21,8 +21,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kagent-dev/kagent/go/internal/httpserver/auth"
+	httpauth "github.com/kagent-dev/kagent/go/internal/httpserver/auth"
 	"github.com/kagent-dev/kagent/go/pkg/app"
+	kgauth "github.com/kagent-dev/kagent/go/pkg/auth"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -31,16 +32,16 @@ import (
 
 //nolint:gocyclo
 func main() {
-	var authenticator auth.AuthProvider = &auth.UnsecureAuthenticator{}
+	var authenticator kgauth.AuthProvider = &httpauth.UnsecureAuthenticator{}
 	if os.Getenv("OIDC_ISSUER_URL") != "" {
-		if oidcAuth, err := auth.NewOIDCAuthenticatorFromEnv(context.Background()); err == nil {
+		if oidcAuth, err := httpauth.NewOIDCAuthenticatorFromEnv(context.Background()); err == nil {
 			authenticator = oidcAuth
 		}
 	}
 	app.Start(func(bootstrap app.BootstrapConfig) (*app.ExtensionConfig, error) {
-		authorizer := &auth.NoopAuthorizer{}
+		var authorizer kgauth.Authorizer = &httpauth.NoopAuthorizer{}
 		if strings.EqualFold(strings.TrimSpace(os.Getenv("KAGENT_AUTHZ_MODE")), "k8s") {
-			authorizer = auth.NewK8sRBACAuthorizer(bootstrap.Manager.GetClient())
+			authorizer = httpauth.NewK8sRBACAuthorizer(bootstrap.Manager.GetClient())
 		}
 
 		return &app.ExtensionConfig{

@@ -7,6 +7,12 @@
 tag: ""
 registry: "cr.kagent.dev"
 
+auth:
+  authzMode: ""
+  oidc:
+    issuerUrl: ""
+    clientId: ""
+
 
 imagePullSecrets: []
 imagePullPolicy: IfNotPresent
@@ -90,7 +96,7 @@ controller:
   nodeSelector: {}
 
   image:
-    registry: ""
+    registry: 
     repository: kagent-dev/kagent/controller
     tag: "" # Will default to global, then Chart version
     pullPolicy: ""

@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/kagent-dev/kagent/go/api/v1alpha2"
+	"github.com/kagent-dev/kagent/go/internal/database"
 	"github.com/kagent-dev/kagent/go/internal/httpserver/errors"
 	common "github.com/kagent-dev/kagent/go/internal/utils"
 	"github.com/kagent-dev/kagent/go/pkg/auth"
@@ -45,6 +47,14 @@ type ToolServerCreateRequest struct {
 func (h *ToolServersHandler) HandleListToolServers(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("toolservers-handler").WithValues("operation", "list")
 	log.Info("Received request to list ToolServers")
+
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+	log = log.WithValues("selectedNamespace", selectedNS)
+
 	if err := Check(h.Authorizer, r, auth.Resource{Type: "ToolServer"}); err != nil {
 		w.RespondWithError(err)
 		return
@@ -56,8 +66,15 @@ func (h *ToolServersHandler) HandleListToolServers(w ErrorResponseWriter, r *htt
 		return
 	}
 
-	toolServerWithTools := make([]api.ToolServerResponse, len(toolServers))
-	for i, toolServer := range toolServers {
+	filtered := make([]database.ToolServer, 0, len(toolServers))
+	for _, ts := range toolServers {
+		if strings.HasPrefix(ts.Name, selectedNS+"/") {
+			filtered = append(filtered, ts)
+		}
+	}
+
+	toolServerWithTools := make([]api.ToolServerResponse, len(filtered))
+	for i, toolServer := range filtered {
 		tools, err := h.DatabaseService.ListToolsForServer(toolServer.Name, toolServer.GroupKind)
 		if err != nil {
 			w.RespondWithError(errors.NewInternalServerError("Failed to list tools for ToolServer from database", err))
@@ -127,23 +144,33 @@ func (h *ToolServersHandler) HandleCreateToolServer(w ErrorResponseWriter, r *ht
 
 // handleCreateRemoteMCPServer handles the creation of a RemoteMCPServer
 func (h *ToolServersHandler) handleCreateRemoteMCPServer(w ErrorResponseWriter, r *http.Request, toolServerRequest *v1alpha2.RemoteMCPServer, log logr.Logger) {
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
 	if toolServerRequest.Namespace == "" {
-		toolServerRequest.Namespace = common.GetResourceNamespace()
+		toolServerRequest.Namespace = selectedNS
+	}
+	if toolServerRequest.Namespace != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("ToolServer namespace must match selected namespace", nil))
+		return
 	}
 	toolRef, err := common.ParseRefString(toolServerRequest.Name, toolServerRequest.Namespace)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Invalid ToolServer metadata", err))
 		return
 	}
-	if toolRef.Namespace == common.GetResourceNamespace() {
-		log.V(4).Info("Namespace not provided in request. Creating in controller installation namespace",
-			"namespace", toolRef.Namespace)
-	}
 
 	log = log.WithValues(
 		"toolServerName", toolRef.Name,
 		"toolServerNamespace", toolRef.Namespace,
 	)
+
+	if err := Check(h.Authorizer, r, auth.Resource{Type: "RemoteMCPServer", Name: toolRef.String()}); err != nil {
+		w.RespondWithError(err)
+		return
+	}
 
 	if err := h.KubeClient.Create(r.Context(), toolServerRequest); err != nil {
 		w.RespondWithError(errors.NewInternalServerError("Failed to create RemoteMCPServer in Kubernetes", err))
@@ -157,17 +184,22 @@ func (h *ToolServersHandler) handleCreateRemoteMCPServer(w ErrorResponseWriter, 
 
 // handleCreateMCPServer handles the creation of an MCPServer (stdio-based)
 func (h *ToolServersHandler) handleCreateMCPServer(w ErrorResponseWriter, r *http.Request, toolServerRequest *v1alpha1.MCPServer, log logr.Logger) {
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
 	if toolServerRequest.Namespace == "" {
-		toolServerRequest.Namespace = common.GetResourceNamespace()
+		toolServerRequest.Namespace = selectedNS
+	}
+	if toolServerRequest.Namespace != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("ToolServer namespace must match selected namespace", nil))
+		return
 	}
 	toolRef, err := common.ParseRefString(toolServerRequest.Name, toolServerRequest.Namespace)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Invalid ToolServer metadata", err))
 		return
-	}
-	if toolRef.Namespace == common.GetResourceNamespace() {
-		log.V(4).Info("Namespace not provided in request. Creating in controller installation namespace",
-			"namespace", toolRef.Namespace)
 	}
 
 	log = log.WithValues(

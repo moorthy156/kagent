@@ -34,12 +34,18 @@ func (h *MemoryHandler) HandleListMemories(w ErrorResponseWriter, r *http.Reques
 	log := ctrllog.FromContext(r.Context()).WithName("memory-handler").WithValues("operation", "list-memories")
 	log.Info("Listing Memories")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	if err := Check(h.Authorizer, r, auth.Resource{Type: "Memory"}); err != nil {
 		w.RespondWithError(err)
 		return
 	}
 	memoryList := &v1alpha1.MemoryList{}
-	if err := h.KubeClient.List(r.Context(), memoryList); err != nil {
+	if err := h.KubeClient.List(r.Context(), memoryList, client.InNamespace(selectedNS)); err != nil {
 		w.RespondWithError(errors.NewInternalServerError("Failed to list Memories", err))
 		return
 	}
@@ -73,6 +79,12 @@ func (h *MemoryHandler) HandleCreateMemory(w ErrorResponseWriter, r *http.Reques
 	log := ctrllog.FromContext(r.Context()).WithName("memory-handler").WithValues("operation", "create")
 	log.Info("Received request to create Memory")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	var req api.CreateMemoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Error(err, "Failed to decode request body")
@@ -80,15 +92,15 @@ func (h *MemoryHandler) HandleCreateMemory(w ErrorResponseWriter, r *http.Reques
 		return
 	}
 
-	memoryRef, err := common.ParseRefString(req.Ref, common.GetResourceNamespace())
+	memoryRef, err := common.ParseRefString(req.Ref, selectedNS)
 	if err != nil {
 		log.Error(err, "Failed to parse Ref")
 		w.RespondWithError(errors.NewBadRequestError("Invalid Ref", err))
 		return
 	}
-	if !strings.Contains(req.Ref, "/") {
-		log.V(4).Info("Namespace not provided in request. Creating in controller installation namespace",
-			"defaultNamespace", memoryRef.Namespace)
+	if memoryRef.Namespace != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("Memory namespace must match selected namespace", nil))
+		return
 	}
 
 	log = log.WithValues(

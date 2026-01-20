@@ -251,10 +251,13 @@ func (s *HTTPServer) setupRoutes() {
 	s.router.PathPrefix(APIPathA2A + "/{namespace}/{name}").Handler(s.config.A2AHandler)
 
 	// Use middleware for common functionality
-	s.router.Use(auth.AuthnMiddleware(s.authenticator))
-	s.router.Use(contentTypeMiddleware)
-	s.router.Use(loggingMiddleware)
+	// Order matters: errorHandler must wrap the ResponseWriter before anything else
+	// so downstream middleware/handlers can use RespondWithError.
 	s.router.Use(errorHandlerMiddleware)
+	s.router.Use(loggingMiddleware)
+	s.router.Use(contentTypeMiddleware)
+	s.router.Use(auth.AuthnMiddleware(s.authenticator))
+	s.router.Use(namespaceSelectionMiddleware)
 }
 
 func adaptHandler(h func(handlers.ErrorResponseWriter, *http.Request)) http.HandlerFunc {

@@ -33,13 +33,19 @@ func NewModelConfigHandler(base *Base) *ModelConfigHandler {
 func (h *ModelConfigHandler) HandleListModelConfigs(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("modelconfig-handler").WithValues("operation", "list")
 	log.Info("Listing ModelConfigs")
+
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
 	if err := Check(h.Authorizer, r, auth.Resource{Type: "ModelConfig"}); err != nil {
 		w.RespondWithError(err)
 		return
 	}
 
 	modelConfigs := &v1alpha2.ModelConfigList{}
-	if err := h.KubeClient.List(r.Context(), modelConfigs); err != nil {
+	if err := h.KubeClient.List(r.Context(), modelConfigs, client.InNamespace(selectedNS)); err != nil {
 		w.RespondWithError(errors.NewInternalServerError("Failed to list ModelConfigs from Kubernetes", err))
 		return
 	}
@@ -186,6 +192,12 @@ func (h *ModelConfigHandler) HandleCreateModelConfig(w ErrorResponseWriter, r *h
 	log := ctrllog.FromContext(r.Context()).WithName("modelconfig-handler").WithValues("operation", "create")
 	log.Info("Received request to create ModelConfig")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	var req api.CreateModelConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Error(err, "Failed to decode request body")
@@ -193,15 +205,15 @@ func (h *ModelConfigHandler) HandleCreateModelConfig(w ErrorResponseWriter, r *h
 		return
 	}
 
-	modelConfigRef, err := common.ParseRefString(req.Ref, common.GetResourceNamespace())
+	modelConfigRef, err := common.ParseRefString(req.Ref, selectedNS)
 	if err != nil {
 		log.Error(err, "Failed to parse Ref")
 		w.RespondWithError(errors.NewBadRequestError("Invalid Ref", err))
 		return
 	}
-	if !strings.Contains(req.Ref, "/") {
-		log.V(4).Info("Namespace not provided in request. Creating in controller installation namespace",
-			"defaultNamespace", modelConfigRef.Namespace)
+	if modelConfigRef.Namespace != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("ModelConfig namespace must match selected namespace", nil))
+		return
 	}
 
 	log = log.WithValues(

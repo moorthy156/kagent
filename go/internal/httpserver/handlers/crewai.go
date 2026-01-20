@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -51,7 +52,13 @@ type KagentFlowStateResponse struct {
 func (h *CrewAIHandler) HandleStoreMemory(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("crewai-handler").WithValues("operation", "store-memory")
 
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
@@ -69,6 +76,7 @@ func (h *CrewAIHandler) HandleStoreMemory(w ErrorResponseWriter, r *http.Request
 		w.RespondWithError(errors.NewBadRequestError("thread_id is required", nil))
 		return
 	}
+	req.ThreadID = fmt.Sprintf("%s/%s", selectedNS, req.ThreadID)
 
 	log = log.WithValues(
 		"threadID", req.ThreadID,
@@ -104,7 +112,13 @@ func (h *CrewAIHandler) HandleStoreMemory(w ErrorResponseWriter, r *http.Request
 func (h *CrewAIHandler) HandleGetMemory(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("crewai-handler").WithValues("operation", "list-memory")
 
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
@@ -114,6 +128,7 @@ func (h *CrewAIHandler) HandleGetMemory(w ErrorResponseWriter, r *http.Request) 
 		w.RespondWithError(errors.NewBadRequestError("thread_id is required", nil))
 		return
 	}
+	threadID = fmt.Sprintf("%s/%s", selectedNS, threadID)
 
 	taskDescription := r.URL.Query().Get("q") // query parameter for task description search
 
@@ -167,7 +182,13 @@ func (h *CrewAIHandler) HandleGetMemory(w ErrorResponseWriter, r *http.Request) 
 func (h *CrewAIHandler) HandleResetMemory(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("crewai-handler").WithValues("operation", "reset-memory")
 
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
@@ -178,6 +199,7 @@ func (h *CrewAIHandler) HandleResetMemory(w ErrorResponseWriter, r *http.Request
 		w.RespondWithError(errors.NewBadRequestError("thread_id is required", nil))
 		return
 	}
+	threadID = fmt.Sprintf("%s/%s", selectedNS, threadID)
 
 	log = log.WithValues("userID", userID, "threadID", threadID)
 
@@ -197,7 +219,13 @@ func (h *CrewAIHandler) HandleResetMemory(w ErrorResponseWriter, r *http.Request
 func (h *CrewAIHandler) HandleStoreFlowState(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("crewai-handler").WithValues("operation", "store-flow-state")
 
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
@@ -224,6 +252,8 @@ func (h *CrewAIHandler) HandleStoreFlowState(w ErrorResponseWriter, r *http.Requ
 		"threadID", req.ThreadID,
 		"methodName", req.MethodName,
 	)
+
+	req.ThreadID = fmt.Sprintf("%s/%s", selectedNS, req.ThreadID)
 
 	// Serialize state data to JSON string
 	stateDataJSON, err := json.Marshal(req.StateData)
@@ -255,7 +285,13 @@ func (h *CrewAIHandler) HandleStoreFlowState(w ErrorResponseWriter, r *http.Requ
 func (h *CrewAIHandler) HandleGetFlowState(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("crewai-handler").WithValues("operation", "get-flow-state")
 
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
@@ -266,6 +302,7 @@ func (h *CrewAIHandler) HandleGetFlowState(w ErrorResponseWriter, r *http.Reques
 		w.RespondWithError(errors.NewBadRequestError("thread_id is required", nil))
 		return
 	}
+	threadID = fmt.Sprintf("%s/%s", selectedNS, threadID)
 
 	log = log.WithValues("userID", userID, "threadID", threadID)
 

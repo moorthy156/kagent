@@ -22,6 +22,17 @@ func NewTasksHandler(base *Base) *TasksHandler {
 func (h *TasksHandler) HandleGetTask(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("tasks-handler").WithValues("operation", "get-task")
 
+	_, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+	_, err = getUserIDOrAgentUser(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
+		return
+	}
+
 	taskID, err := GetPathParam(r, "task_id")
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get task ID from path", err))
@@ -42,6 +53,17 @@ func (h *TasksHandler) HandleGetTask(w ErrorResponseWriter, r *http.Request) {
 
 func (h *TasksHandler) HandleCreateTask(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("tasks-handler").WithValues("operation", "create-task")
+
+	_, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+	_, err = getUserIDOrAgentUser(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
+		return
+	}
 
 	task := protocol.Task{}
 	if err := DecodeJSONBody(r, &task); err != nil {
@@ -66,12 +88,29 @@ func (h *TasksHandler) HandleCreateTask(w ErrorResponseWriter, r *http.Request) 
 func (h *TasksHandler) HandleDeleteTask(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("tasks-handler").WithValues("operation", "delete-task")
 
+	_, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+	_, err = getUserIDOrAgentUser(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
+		return
+	}
+
 	taskID, err := GetPathParam(r, "task_id")
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get task ID from path", err))
 		return
 	}
 	log = log.WithValues("task_id", taskID)
+
+	_, err = h.DatabaseService.GetTask(taskID)
+	if err != nil {
+		w.RespondWithError(errors.NewNotFoundError("Task not found", err))
+		return
+	}
 
 	if err := h.DatabaseService.DeleteTask(taskID); err != nil {
 		w.RespondWithError(errors.NewInternalServerError("Failed to delete task", err))

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kagent-dev/kagent/go/internal/httpserver/errors"
+	"github.com/kagent-dev/kagent/go/pkg/auth"
 	"github.com/kagent-dev/kagent/go/pkg/client/api"
 	corev1 "k8s.io/api/core/v1"
 	ctrl_client "sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,6 +32,11 @@ func NewNamespacesHandler(base *Base, watchedNamespaces []string) *NamespacesHan
 // HandleListNamespaces returns a list of namespaces based on the watch configuration
 func (h *NamespacesHandler) HandleListNamespaces(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("namespaces-handler").WithValues("operation", "list")
+
+	if err := Check(h.Authorizer, r, auth.Resource{Type: "Namespace"}); err != nil {
+		w.RespondWithError(err)
+		return
+	}
 
 	// If no watched namespaces are configured, list all namespaces in the cluster
 	if len(h.WatchedNamespaces) == 0 {

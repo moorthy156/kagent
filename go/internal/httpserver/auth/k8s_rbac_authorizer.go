@@ -25,13 +25,28 @@ func (a *K8sRBACAuthorizer) Check(ctx context.Context, principal kagentauth.Prin
 		return err
 	}
 
+	// If the resource is namespaced but the caller didn't provide a namespace (common for list endpoints),
+	// default to the selected namespace from the HTTP layer.
+	if namespace == "" && resource.Type != "Namespace" {
+		if selectedNS, ok := kagentauth.SelectedNamespaceFrom(ctx); ok {
+			namespace = selectedNS
+		}
+	}
+
+	// The HTTP layer maps GET requests to VerbGet.
+	// For collection endpoints (no object name), Kubernetes RBAC expects "list".
+	sarVerb := string(verb)
+	if verb == kagentauth.VerbGet && name == "" {
+		sarVerb = "list"
+	}
+
 	sar := &authzv1.SubjectAccessReview{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: authzv1.SubjectAccessReviewSpec{
 			User:   principal.User.ID,
 			Groups: principal.User.Roles,
 			ResourceAttributes: &authzv1.ResourceAttributes{
-				Verb:      string(verb),
+				Verb:      sarVerb,
 				Group:     group,
 				Resource:  res,
 				Namespace: namespace,

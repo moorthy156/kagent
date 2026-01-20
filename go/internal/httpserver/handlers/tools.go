@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
+	"github.com/kagent-dev/kagent/go/internal/database"
 	"github.com/kagent-dev/kagent/go/internal/httpserver/errors"
 	"github.com/kagent-dev/kagent/go/pkg/client/api"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -22,6 +24,13 @@ func NewToolsHandler(base *Base) *ToolsHandler {
 func (h *ToolsHandler) HandleListTools(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("tools-handler").WithValues("operation", "list-db")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+	log = log.WithValues("selectedNamespace", selectedNS)
+
 	userID, err := GetUserID(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
@@ -36,7 +45,14 @@ func (h *ToolsHandler) HandleListTools(w ErrorResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Info("Successfully listed tools", "count", len(tools))
-	data := api.NewResponse(tools, "Successfully listed tools", false)
+	filtered := make([]database.Tool, 0, len(tools))
+	for _, t := range tools {
+		if strings.HasPrefix(t.ServerName, selectedNS+"/") {
+			filtered = append(filtered, t)
+		}
+	}
+
+	log.Info("Successfully listed tools", "count", len(filtered))
+	data := api.NewResponse(filtered, "Successfully listed tools", false)
 	RespondWithJSON(w, http.StatusOK, data)
 }

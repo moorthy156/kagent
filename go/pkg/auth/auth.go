@@ -60,8 +60,11 @@ type Authorizer interface {
 
 type sessionKeyType struct{}
 
+type selectedNamespaceKeyType struct{}
+
 var (
 	sessionKey = sessionKeyType{}
+	selectedNamespaceKey = selectedNamespaceKeyType{}
 )
 
 func AuthSessionFrom(ctx context.Context) (Session, bool) {
@@ -71,6 +74,15 @@ func AuthSessionFrom(ctx context.Context) (Session, bool) {
 
 func AuthSessionTo(ctx context.Context, session Session) context.Context {
 	return context.WithValue(ctx, sessionKey, session)
+}
+
+func SelectedNamespaceFrom(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(selectedNamespaceKey).(string)
+	return v, ok && v != ""
+}
+
+func SelectedNamespaceTo(ctx context.Context, namespace string) context.Context {
+	return context.WithValue(ctx, selectedNamespaceKey, namespace)
 }
 
 func AuthnMiddleware(authn AuthProvider) func(http.Handler) http.Handler {

@@ -91,6 +91,14 @@ func GetPrincipal(r *http.Request) (auth.Principal, error) {
 	return s.Principal(), nil
 }
 
+func GetSelectedNamespace(r *http.Request) (string, error) {
+	ns, ok := auth.SelectedNamespaceFrom(r.Context())
+	if !ok || ns == "" {
+		return "", fmt.Errorf("missing selected namespace")
+	}
+	return ns, nil
+}
+
 // GetPathParam gets a path parameter from the request
 func GetPathParam(r *http.Request, name string) (string, error) {
 	log := ctrllog.Log.WithName("http-helpers")

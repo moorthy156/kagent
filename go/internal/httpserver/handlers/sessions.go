@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kagent-dev/kagent/go/internal/database"
@@ -32,12 +33,22 @@ type RunRequest struct {
 func (h *SessionsHandler) HandleGetSessionsForAgent(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("sessions-handler").WithValues("operation", "get-sessions-for-agent")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	namespace, err := GetPathParam(r, "namespace")
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get agent ref from path", err))
 		return
 	}
 	log = log.WithValues("namespace", namespace)
+	if namespace != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("Agent namespace must match selected namespace", nil))
+		return
+	}
 
 	agentName, err := GetPathParam(r, "name")
 	if err != nil {
@@ -66,14 +77,33 @@ func (h *SessionsHandler) HandleGetSessionsForAgent(w ErrorResponseWriter, r *ht
 		return
 	}
 
-	log.Info("Successfully listed sessions", "count", len(sessions))
-	data := api.NewResponse(sessions, "Successfully listed sessions", false)
+	// Extra safety: ensure returned sessions are in selected namespace.
+	prefix := utils.ConvertToPythonIdentifier(selectedNS + "/")
+	filtered := make([]database.Session, 0, len(sessions))
+	for _, s := range sessions {
+		if s.AgentID == nil {
+			continue
+		}
+		if strings.HasPrefix(*s.AgentID, prefix) {
+			filtered = append(filtered, s)
+		}
+	}
+
+	log.Info("Successfully listed sessions", "count", len(filtered))
+	data := api.NewResponse(filtered, "Successfully listed sessions", false)
 	RespondWithJSON(w, http.StatusOK, data)
 }
 
 // HandleListSessions handles GET /api/sessions requests using database
 func (h *SessionsHandler) HandleListSessions(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("sessions-handler").WithValues("operation", "list-db")
+
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+	log = log.WithValues("selectedNamespace", selectedNS)
 
 	userID, err := GetUserID(r)
 	if err != nil {
@@ -89,14 +119,33 @@ func (h *SessionsHandler) HandleListSessions(w ErrorResponseWriter, r *http.Requ
 		return
 	}
 
-	log.Info("Successfully listed sessions", "count", len(sessions))
-	data := api.NewResponse(sessions, "Successfully listed sessions", false)
+	// Sessions are DB records; scope by agent ref encoded in AgentID.
+	// Agent IDs are stored as python identifiers of "namespace/name".
+	prefix := utils.ConvertToPythonIdentifier(selectedNS + "/")
+	filtered := make([]database.Session, 0, len(sessions))
+	for _, s := range sessions {
+		if s.AgentID == nil {
+			continue
+		}
+		if strings.HasPrefix(*s.AgentID, prefix) {
+			filtered = append(filtered, s)
+		}
+	}
+
+	log.Info("Successfully listed sessions", "count", len(filtered))
+	data := api.NewResponse(filtered, "Successfully listed sessions", false)
 	RespondWithJSON(w, http.StatusOK, data)
 }
 
 // HandleCreateSession handles POST /api/sessions requests using database
 func (h *SessionsHandler) HandleCreateSession(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("sessions-handler").WithValues("operation", "create-db")
+
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
 
 	var sessionRequest api.SessionRequest
 	if err := DecodeJSONBody(r, &sessionRequest); err != nil {
@@ -114,6 +163,16 @@ func (h *SessionsHandler) HandleCreateSession(w ErrorResponseWriter, r *http.Req
 
 	if sessionRequest.AgentRef == nil {
 		w.RespondWithError(errors.NewBadRequestError("agent_ref is required", nil))
+		return
+	}
+	// Enforce session's agent ref namespace = selected namespace.
+	agentRef, err := utils.ParseRefString(*sessionRequest.AgentRef, selectedNS)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("agent_ref is invalid", err))
+		return
+	}
+	if agentRef.Namespace != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("agent_ref namespace must match selected namespace", nil))
 		return
 	}
 	log = log.WithValues("agentRef", *sessionRequest.AgentRef)
@@ -161,6 +220,12 @@ type SessionResponse struct {
 func (h *SessionsHandler) HandleGetSession(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("sessions-handler").WithValues("operation", "get-db")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	sessionID, err := GetPathParam(r, "session_id")
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get session name from path", err))
@@ -179,6 +244,10 @@ func (h *SessionsHandler) HandleGetSession(w ErrorResponseWriter, r *http.Reques
 	session, err := h.DatabaseService.GetSession(sessionID, userID)
 	if err != nil {
 		w.RespondWithError(errors.NewNotFoundError("Session not found", err))
+		return
+	}
+	if session.AgentID == nil || !strings.HasPrefix(*session.AgentID, utils.ConvertToPythonIdentifier(selectedNS+"/")) {
+		w.RespondWithError(errors.NewForbiddenError("Session is not in selected namespace", nil))
 		return
 	}
 
@@ -222,6 +291,12 @@ func (h *SessionsHandler) HandleGetSession(w ErrorResponseWriter, r *http.Reques
 func (h *SessionsHandler) HandleUpdateSession(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("sessions-handler").WithValues("operation", "update-db")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	var sessionRequest api.SessionRequest
 	if err := DecodeJSONBody(r, &sessionRequest); err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Invalid request body", err))
@@ -250,6 +325,19 @@ func (h *SessionsHandler) HandleUpdateSession(w ErrorResponseWriter, r *http.Req
 		w.RespondWithError(errors.NewNotFoundError("Session not found", err))
 		return
 	}
+	if session.AgentID == nil || !strings.HasPrefix(*session.AgentID, utils.ConvertToPythonIdentifier(selectedNS+"/")) {
+		w.RespondWithError(errors.NewForbiddenError("Session is not in selected namespace", nil))
+		return
+	}
+	agentRef, err := utils.ParseRefString(*sessionRequest.AgentRef, selectedNS)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("agent_ref is invalid", err))
+		return
+	}
+	if agentRef.Namespace != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("agent_ref namespace must match selected namespace", nil))
+		return
+	}
 
 	agent, err := h.DatabaseService.GetAgent(utils.ConvertToPythonIdentifier(*sessionRequest.AgentRef))
 	if err != nil {
@@ -274,6 +362,12 @@ func (h *SessionsHandler) HandleUpdateSession(w ErrorResponseWriter, r *http.Req
 func (h *SessionsHandler) HandleDeleteSession(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("sessions-handler").WithValues("operation", "delete-db")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	userID, err := GetUserID(r)
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
@@ -287,6 +381,17 @@ func (h *SessionsHandler) HandleDeleteSession(w ErrorResponseWriter, r *http.Req
 		return
 	}
 	log = log.WithValues("session_id", sessionID)
+
+	// Enforce namespace ownership before deleting.
+	session, err := h.DatabaseService.GetSession(sessionID, userID)
+	if err != nil {
+		w.RespondWithError(errors.NewNotFoundError("Session not found", err))
+		return
+	}
+	if session.AgentID == nil || !strings.HasPrefix(*session.AgentID, utils.ConvertToPythonIdentifier(selectedNS+"/")) {
+		w.RespondWithError(errors.NewForbiddenError("Session is not in selected namespace", nil))
+		return
+	}
 
 	if err := h.DatabaseService.DeleteSession(sessionID, userID); err != nil {
 		w.RespondWithError(errors.NewInternalServerError("Failed to delete session", err))
@@ -302,6 +407,12 @@ func (h *SessionsHandler) HandleDeleteSession(w ErrorResponseWriter, r *http.Req
 func (h *SessionsHandler) HandleListTasksForSession(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("sessions-handler").WithValues("operation", "list-tasks-db")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	sessionID, err := GetPathParam(r, "session_id")
 	if err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Failed to get session ID from path", err))
@@ -316,10 +427,14 @@ func (h *SessionsHandler) HandleListTasksForSession(w ErrorResponseWriter, r *ht
 	}
 	log = log.WithValues("userID", userID)
 
-	// Verify session exists
-	_, err = h.DatabaseService.GetSession(sessionID, userID)
+	// Verify session exists and is in selected namespace
+	session, err := h.DatabaseService.GetSession(sessionID, userID)
 	if err != nil {
 		w.RespondWithError(errors.NewNotFoundError("Session not found for given ID", err))
+		return
+	}
+	if session.AgentID == nil || !strings.HasPrefix(*session.AgentID, utils.ConvertToPythonIdentifier(selectedNS+"/")) {
+		w.RespondWithError(errors.NewForbiddenError("Session is not in selected namespace", nil))
 		return
 	}
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"fmt"
 
 	"github.com/kagent-dev/kagent/go/internal/database"
 	"github.com/kagent-dev/kagent/go/internal/httpserver/errors"
@@ -25,6 +26,18 @@ func NewFeedbackHandler(base *Base) *FeedbackHandler {
 func (h *FeedbackHandler) HandleCreateFeedback(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("feedback-handler").WithValues("operation", "create-feedback")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+	userID, err := getUserIDOrAgentUser(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
+		return
+	}
+	scopedUserID := fmt.Sprintf("%s::%s", userID, selectedNS)
+
 	log.Info("Received feedback submission")
 
 	// Read request body
@@ -42,6 +55,7 @@ func (h *FeedbackHandler) HandleCreateFeedback(w ErrorResponseWriter, r *http.Re
 		w.RespondWithError(errors.NewBadRequestError("Invalid feedback data format", err))
 		return
 	}
+	feedbackReq.UserID = scopedUserID
 
 	// Validate the request
 	if feedbackReq.FeedbackText == "" {
@@ -65,16 +79,22 @@ func (h *FeedbackHandler) HandleCreateFeedback(w ErrorResponseWriter, r *http.Re
 func (h *FeedbackHandler) HandleListFeedback(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("feedback-handler").WithValues("operation", "list-feedback")
 
-	log.Info("Listing feedback")
-
-	userID, err := GetUserID(r)
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+	userID, err := getUserIDOrAgentUser(r)
 	if err != nil {
 		log.Error(err, "Failed to get user ID")
 		w.RespondWithError(errors.NewBadRequestError("Failed to get user ID", err))
 		return
 	}
+	scopedUserID := fmt.Sprintf("%s::%s", userID, selectedNS)
 
-	feedback, err := h.DatabaseService.ListFeedback(userID)
+	log.Info("Listing feedback")
+
+	feedback, err := h.DatabaseService.ListFeedback(scopedUserID)
 	if err != nil {
 		log.Error(err, "Failed to list feedback")
 		w.RespondWithError(errors.NewInternalServerError("Failed to list feedback", err))

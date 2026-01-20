@@ -10,6 +10,15 @@ data:
   DATABASE_TYPE: {{ .Values.database.type | quote }}
   DEFAULT_MODEL_CONFIG_NAME: {{ include "kagent.defaultModelConfigName" . | quote }}
   KAGENT_CONTROLLER_NAME: {{ include "kagent.fullname" . }}-controller
+  {{- if .Values.auth.authzMode }}
+  KAGENT_AUTHZ_MODE: {{ .Values.auth.authzMode | quote }}
+  {{- end }}
+  {{- if .Values.auth.oidc.issuerUrl }}
+  OIDC_ISSUER_URL: {{ .Values.auth.oidc.issuerUrl | quote }}
+  {{- end }}
+  {{- if .Values.auth.oidc.clientId }}
+  OIDC_CLIENT_ID: {{ .Values.auth.oidc.clientId | quote }}
+  {{- end }}
   IMAGE_PULL_POLICY: {{ .Values.controller.agentImage.pullPolicy | default .Values.imagePullPolicy | quote }}
   {{- if and .Values.controller.agentImage.pullSecret (not (eq .Values.controller.agentImage.pullSecret "")) }}
   IMAGE_PULL_SECRET: {{ .Values.controller.agentImage.pullSecret | quote }}

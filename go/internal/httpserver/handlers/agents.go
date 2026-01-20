@@ -31,13 +31,19 @@ func NewAgentsHandler(base *Base) *AgentsHandler {
 func (h *AgentsHandler) HandleListAgents(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("agents-handler").WithValues("operation", "list-db")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	if err := Check(h.Authorizer, r, auth.Resource{Type: "Agent"}); err != nil {
 		w.RespondWithError(err)
 		return
 	}
 
 	agentList := &v1alpha2.AgentList{}
-	if err := h.KubeClient.List(r.Context(), agentList); err != nil {
+	if err := h.KubeClient.List(r.Context(), agentList, client.InNamespace(selectedNS)); err != nil {
 		w.RespondWithError(errors.NewInternalServerError("Failed to list Agents from Kubernetes", err))
 		return
 	}
@@ -165,15 +171,25 @@ func (h *AgentsHandler) HandleGetAgent(w ErrorResponseWriter, r *http.Request) {
 func (h *AgentsHandler) HandleCreateAgent(w ErrorResponseWriter, r *http.Request) {
 	log := ctrllog.FromContext(r.Context()).WithName("agents-handler").WithValues("operation", "create-db")
 
+	selectedNS, err := GetSelectedNamespace(r)
+	if err != nil {
+		w.RespondWithError(errors.NewBadRequestError("Missing selected namespace", err))
+		return
+	}
+
 	var agentReq v1alpha2.Agent
 	if err := DecodeJSONBody(r, &agentReq); err != nil {
 		w.RespondWithError(errors.NewBadRequestError("Invalid request body", err))
 		return
 	}
 	if agentReq.Namespace == "" {
-		agentReq.Namespace = utils.GetResourceNamespace()
-		log.V(4).Info("Namespace not provided in request. Creating in controller installation namespace",
+		agentReq.Namespace = selectedNS
+		log.V(4).Info("Namespace not provided in request. Creating in selected namespace",
 			"namespace", agentReq.Namespace)
+	}
+	if agentReq.Namespace != selectedNS {
+		w.RespondWithError(errors.NewForbiddenError("Agent namespace must match selected namespace", nil))
+		return
 	}
 	agentRef, err := utils.ParseRefString(agentReq.Name, agentReq.Namespace)
 	if err != nil {
