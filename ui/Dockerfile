@@ -4,16 +4,20 @@ ARG BUILDPLATFORM
 FROM --platform=$BUILDPLATFORM $BASE_IMAGE_REGISTRY/chainguard/wolfi-base:latest AS deps
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
+
 # This is used to print the build platform in the logs
 ARG BUILDPLATFORM
 
 RUN --mount=type=cache,target=/var/cache/apk,rw \
     echo "Installing on $BUILDPLATFORM" \
-    && apk update \
-    && apk add curl bash openssl unzip ca-certificates nginx supervisor \
+    && for i in 1 2 3; do \
+      apk update && apk add curl bash openssl unzip ca-certificates nginx supervisor nodejs npm busybox && break; \
+      echo "apk failed (attempt $i/3), retrying..." >&2; \
+      sleep 2; \
+    done \
     && update-ca-certificates
 
-ARG TOOLS_BUN_VERSION
+ARG TOOLS_BUN_VERSION=1.1.38
 ARG TARGETARCH
 
 ENV DO_NOT_TRACK=1
@@ -28,7 +32,7 @@ ENV PATH=$BUN_INSTALL/bin:$PATH
 # brew install oven-sh/bun/bun
 RUN --mount=type=cache,target=/cache/bun,rw \
     mkdir -p $BUN_INSTALL  \
-    && curl -fsSL https://bun.sh/install | bash -s "bun-v$TOOLS_BUN_VERSION" \
+    && if [ -n "$TOOLS_BUN_VERSION" ]; then curl -fsSL https://bun.sh/install | bash -s "bun-v$TOOLS_BUN_VERSION"; else curl -fsSL https://bun.sh/install | bash; fi \
     && bun --version
 
 WORKDIR /app/ui
@@ -51,7 +55,7 @@ RUN --mount=type=cache,target=/cache/node_modules,rw \
     --mount=type=cache,target=/app/ui/.next/cache,rw \
     export NEXT_TELEMETRY_DEBUG=1 \
     && bun install --frozen-lockfile \
-    && bun run build --no-lint \
+    && node ./node_modules/next/dist/bin/next build --no-lint \
     && mkdir -p /app/ui/public
 
 ### STAGE 3: Runtime
@@ -63,17 +67,20 @@ ARG BUILDPLATFORM
 
 RUN --mount=type=cache,target=/var/cache/apk,rw \
     echo "Installing on $BUILDPLATFORM" \
-    && apk update \
-    && apk add curl bash openssl unzip ca-certificates nginx supervisor \
+    && for i in 1 2 3; do \
+      apk update && apk add curl bash openssl unzip ca-certificates nginx supervisor nodejs npm busybox && break; \
+      echo "apk failed (attempt $i/3), retrying..." >&2; \
+      sleep 2; \
+    done \
     && update-ca-certificates
 
-ARG TOOLS_BUN_VERSION
+ARG TOOLS_BUN_VERSION=1.1.38
 ENV BUN_INSTALL=/usr/local/bun
 ENV PATH=$BUN_INSTALL/bin:$PATH
 # Install Bun in native arch for running (uses official install script)
 # brew install oven-sh/bun/bun
 RUN mkdir -p $BUN_INSTALL  \
-    && curl -fsSL https://bun.sh/install | bash -s "bun-v$TOOLS_BUN_VERSION" \
+    && if [ -n "$TOOLS_BUN_VERSION" ]; then curl -fsSL https://bun.sh/install | bash -s "bun-v$TOOLS_BUN_VERSION"; else curl -fsSL https://bun.sh/install | bash; fi \
     && bun --version
 
 RUN mkdir -p /app/ui/public /tmp/nginx/client_temp /tmp/nginx/proxy_temp /tmp/nginx/fastcgi_temp /tmp/nginx/uwsgi_temp /tmp/nginx/scgi_temp  \

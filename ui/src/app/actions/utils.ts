@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
 import { getBackendUrl } from "@/lib/utils";
+import { KAGENT_SELECTED_NAMESPACE_COOKIE, KAGENT_SELECTED_NAMESPACE_HEADER } from "@/lib/namespaceConstants";
 
 export async function getCurrentUserId() {
   // TODO: this should come from login state
@@ -22,6 +24,9 @@ export async function fetchApi<T>(path: string, options: ApiOptions = {}): Promi
   // Ensure path starts with a slash
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${getBackendUrl()}${cleanPath}`;
+
+  const cookieStore = await cookies();
+  const selectedNamespace = cookieStore.get(KAGENT_SELECTED_NAMESPACE_COOKIE)?.value;
   
   try {
     const response = await fetch(url, {
@@ -30,6 +35,7 @@ export async function fetchApi<T>(path: string, options: ApiOptions = {}): Promi
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        ...(cleanPath !== "/namespaces" && selectedNamespace ? { [KAGENT_SELECTED_NAMESPACE_HEADER]: selectedNamespace } : {}),
         ...options.headers,
       },
       signal: AbortSignal.timeout(15000), // 15 second timeout

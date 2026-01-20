@@ -57,17 +57,8 @@ export function NamespaceCombobox({
   
           // Set a default namespace if none is currently selected
           if (!value) {
-            const names = sorted.map((ns) => ns.name);
-            let defaultNamespace: string | undefined;
-            if (names.includes("kagent")) {
-              defaultNamespace = "kagent";
-            } else if (names.includes("default")) {
-              defaultNamespace = "default";
-            } else if (names.length > 0) {
-              defaultNamespace = names[0];
-            }
-            if (defaultNamespace) {
-              onValueChange(defaultNamespace);
+            if (sorted.length > 0) {
+              onValueChange(sorted[0].name);
             }
           }
         } else {

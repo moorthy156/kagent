@@ -1,11 +1,12 @@
 import { getBackendOrigin } from "@/lib/utils";
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: { next?: string };
+  searchParams?: Promise<{ next?: string }>;
 }) {
-  const next = searchParams?.next || "/";
+  const resolved = await searchParams;
+  const next = resolved?.next || "/";
   const loginUrl = `${getBackendOrigin()}/auth/login?redirect=${encodeURIComponent(next)}`;
 
   return (

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBackendUrl } from '@/lib/utils';
+import { KAGENT_SELECTED_NAMESPACE_COOKIE, KAGENT_SELECTED_NAMESPACE_HEADER } from '@/lib/namespaceConstants';
 
 export async function POST(
   request: NextRequest,
@@ -21,6 +22,8 @@ export async function POST(
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
         'User-Agent': 'kagent-ui',
+        ...(request.headers.get('cookie') ? { cookie: request.headers.get('cookie') as string } : {}),
+        [KAGENT_SELECTED_NAMESPACE_HEADER]: request.cookies.get(KAGENT_SELECTED_NAMESPACE_COOKIE)?.value || namespace,
       },
       body: JSON.stringify(a2aRequest),
     });

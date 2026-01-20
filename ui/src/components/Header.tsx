@@ -6,6 +6,8 @@ import KAgentLogoWithText from "./kagent-logo-text";
 import KagentLogo from "./kagent-logo";
 import { Plus, Menu, X, ChevronDown, Brain, Server, Eye, Hammer, HomeIcon } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { NamespaceCombobox } from "./NamespaceCombobox";
+import { useNamespaceStore } from "@/lib/namespaceStore";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +17,7 @@ import {
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { selectedNamespace, setSelectedNamespace } = useNamespaceStore();
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -46,6 +49,9 @@ export function Header() {
           
           {/* Desktop navigation */}
           <div className="hidden md:flex items-center space-x-2 lg:space-x-4">
+            <div className="w-56">
+              <NamespaceCombobox value={selectedNamespace} onValueChange={setSelectedNamespace} />
+            </div>
             <Button variant="link" className="text-secondary-foreground" asChild>
               <Link href="/" className="gap-1">
                 <HomeIcon className="h-4 w-4" />
@@ -138,6 +144,9 @@ export function Header() {
         {isMenuOpen && (
           <div className="md:hidden pt-4 pb-2 animate-in fade-in slide-in-from-top duration-300">
             <div className="flex flex-col space-y-1">
+              <div className="px-1 pb-2">
+                <NamespaceCombobox value={selectedNamespace} onValueChange={setSelectedNamespace} />
+              </div>
               {/* Mobile Home Link */}
               <Button variant="ghost" className="text-secondary-foreground justify-start px-1 gap-2" asChild>
                 <Link href="/" onClick={handleMobileLinkClick}>

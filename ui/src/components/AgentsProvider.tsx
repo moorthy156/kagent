@@ -6,6 +6,7 @@ import { getTools } from "@/app/actions/tools";
 import type { Agent, Tool, AgentResponse, BaseResponse, ModelConfig, ToolsResponse, AgentType, EnvVar } from "@/types";
 import { getModelConfigs } from "@/app/actions/modelConfigs";
 import { isResourceNameValid } from "@/lib/utils";
+import { useNamespaceStore } from "@/lib/namespaceStore";
 
 interface ValidationErrors {
   name?: string;
@@ -80,6 +81,7 @@ export function AgentsProvider({ children }: AgentsProviderProps) {
   const [loading, setLoading] = useState(true);
   const [tools, setTools] = useState<ToolsResponse[]>([]);
   const [models, setModels] = useState<ModelConfig[]>([]);
+  const { selectedNamespace } = useNamespaceStore();
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -251,10 +253,14 @@ export function AgentsProvider({ children }: AgentsProviderProps) {
 
   // Initial fetches
   useEffect(() => {
+    if (!selectedNamespace) {
+      setLoading(false);
+      return;
+    }
     fetchAgents();
     fetchTools();
     fetchModels();
-  }, [fetchAgents, fetchTools, fetchModels]);
+  }, [fetchAgents, fetchTools, fetchModels, selectedNamespace]);
 
   const value = {
     agents,

@@ -12,7 +12,7 @@ import TokenStatsDisplay from "./TokenStats";
 import type { TokenStats, Session, ChatStatus } from "@/types";
 import StatusDisplay from "./StatusDisplay";
 import { createSession, getSessionTasks, checkSessionExists } from "@/app/actions/sessions";
-import { getCurrentUserId } from "@/app/actions/utils";
+import { getCurrentUserId } from "@/lib/currentUser";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { createMessageHandlers, extractMessagesFromTasks, extractTokenStatsFromTasks, createMessage } from "@/lib/messageHandlers";
